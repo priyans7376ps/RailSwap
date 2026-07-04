@@ -80,6 +80,13 @@ def create_ticket(user):
     return success_response("Ticket listed successfully", {"ticket": ticket.to_dict()}, 201)
 
 
+@ticket_bp.get("/mine")
+@auth_required
+def get_my_tickets(user):
+    tickets = Ticket.query.filter_by(owner_id=user.id).order_by(Ticket.created_at.desc()).all()
+    return success_response("My tickets fetched", {"tickets": [t.to_dict() for t in tickets]})
+
+
 @ticket_bp.get("/<int:ticket_id>")
 @auth_required
 def get_ticket(_user, ticket_id):

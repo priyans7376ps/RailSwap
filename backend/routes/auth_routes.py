@@ -56,13 +56,17 @@ def register():
         return error_response("Password must be at least 8 characters", 400)
     if not validate_phone(payload.get("phone")):
         return error_response("Invalid phone number", 400)
-    if User.query.filter_by(email=payload["email"].lower()).first():
+
+    normalized_email = payload["email"].lower()
+    if User.query.filter_by(email=normalized_email).first():
         return error_response("Email is already registered", 409)
 
+    # Normal users can never self-register as admin.
     user = User(
         name=payload["name"].strip(),
-        email=payload["email"].lower(),
+        email=normalized_email,
         phone=payload.get("phone"),
+        role="user",
     )
     user.set_password(payload["password"])
     db.session.add(user)
@@ -71,11 +75,13 @@ def register():
     access_token = generate_access_token(user)
     refresh_token = generate_refresh_token(user)
 
-    resp = make_response(success_response(
-        "Registration successful",
-        {"user": user.to_dict(), "access_token": access_token},
-        201,
-    ))
+    resp = make_response(
+        success_response(
+            "Registration successful",
+            {"user": user.to_dict(), "access_token": access_token},
+            201,
+        )
+    )
 
     # httpOnly refresh cookie (prevents JS token theft)
     max_age_seconds = int(current_app.config["JWT_REFRESH_TOKEN_EXPIRES"].total_seconds())
@@ -91,6 +97,7 @@ def register():
     )
 
     return resp
+
 
 
 @auth_bp.post("/login")

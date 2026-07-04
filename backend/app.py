@@ -11,13 +11,102 @@ from config.database import db, init_db
 from utils.response import error_response, success_response
 
 # Load .env at application startup so config reads correct environment variables.
-# Place backend/.env alongside this file (or override via an explicit env var).
 _ENV_PATH = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=str(_ENV_PATH))
 
-
 jwt = JWTManager()
 
+
+def _apply_migrations_or_sync(app: Flask) -> None:
+    """Apply Alembic migrations if possible; otherwise do safe SQLite sync."""
+
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI")
+
+    # Ensure models are imported so SQLAlchemy metadata is complete.
+    import models  # noqa: F401
+
+    with app.app_context():
+        # Try Alembic / Flask-Migrate programmatically.
+        try:
+            from alembic import command
+            from alembic.config import Config as AlembicConfig
+
+            migrations_ini = Path(__file__).resolve().parent / "migrations" / "alembic.ini"
+            alembic_cfg = (
+                AlembicConfig(str(migrations_ini)) if migrations_ini.exists() else AlembicConfig()
+            )
+
+            alembic_cfg.set_main_option("sqlalchemy.url", db_uri)
+            alembic_cfg.set_main_option(
+                "script_location", str(Path(__file__).resolve().parent / "migrations")
+            )
+
+            # If there are multiple heads, upgrade without specifying head will fail.
+            # Use 'heads' to upgrade all heads.
+            command.upgrade(alembic_cfg, "heads")
+            app.logger.info("Alembic migrations applied successfully")
+            return
+        except Exception as alembic_exc:
+            app.logger.warning(
+                "Alembic upgrade failed (%s). Falling back to safe SQLite sync.",
+                alembic_exc,
+            )
+
+        # Safe repair: only adds missing columns; never drops tables.
+        from utils.db_schema_sync import sync_sqlite_users_table
+
+        # Ensure all tables exist in SQLite fallback
+        if db_uri and db_uri.startswith("sqlite:///"):
+            db.create_all()
+
+        sync_sqlite_users_table(db_uri)
+        app.logger.info("SQLite schema sync completed")
+
+
+def _seed_admin_if_needed(app: Flask) -> None:
+    with app.app_context():
+        # Avoid seeding during explicit migration runs/commands.
+        if os.getenv("FLASK_MIGRATIONS_RUNNING", "").lower() in ("1", "true", "yes"):
+            return
+        if os.getenv("FLASK_DB_COMMAND", ""):
+            return
+
+        from models.user_model import User
+
+        admin_email = os.getenv("ADMIN_EMAIL", "admin@railswap.com")
+        admin_password = os.getenv("ADMIN_PASSWORD", "Admin@1234")
+        email_norm = admin_email.lower()
+
+        admin_user = None
+        try:
+            admin_user = User.query.filter_by(email=email_norm).first()
+        except Exception:
+            admin_user = None
+
+        if admin_user is None:
+            admin_user = User(
+                name="Admin",
+                email=email_norm,
+                phone=None,
+                role="admin",
+            )
+            db.session.add(admin_user)
+
+        # Enforce expected values.
+        admin_user.role = "admin"
+        admin_user.name = admin_user.name or "Admin"
+        admin_user.set_password(admin_password)
+
+        # Prevent creation of additional admins (best-effort).
+        try:
+            (
+                User.query.filter(User.role == "admin", User.email != email_norm)
+                .update({"role": "user"}, synchronize_session=False)
+            )
+        except Exception:
+            pass
+
+        db.session.commit()
 
 
 def create_app(config_name=None):
@@ -25,40 +114,21 @@ def create_app(config_name=None):
     env_name = config_name or os.getenv("FLASK_ENV", "development")
     app.config.from_object(config_by_name.get(env_name, config_by_name["development"]))
 
-    # Startup logging to ensure signup/login operate on the same DB.
-    # If you use DATABASE_URL, set it before starting the server.
     db_uri = app.config.get("SQLALCHEMY_DATABASE_URI")
     active_jwt_secret = app.config.get("JWT_SECRET_KEY")
 
-    # Print active SQLAlchemy DB URI during startup.
-    app.logger.info(
-        "Active SQLALCHEMY_DATABASE_URI=%s (FLASK_ENV=%s)",
-        db_uri,
-        env_name,
-    )
-
-    # Also log whether JWT secret is present (do not log secret value).
-    app.logger.info(
-        "JWT_SECRET_KEY loaded: %s",
-        "yes" if active_jwt_secret else "no",
-    )
-
-
-
+    app.logger.info("Active SQLALCHEMY_DATABASE_URI=%s (FLASK_ENV=%s)", db_uri, env_name)
+    app.logger.info("JWT_SECRET_KEY loaded: %s", "yes" if active_jwt_secret else "no")
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
     init_db(app)
-    import models  # noqa: F401
 
-    # Create tables automatically on startup.
-    # This fixes "sqlite3.OperationalError: no such table: users" when using SQLite.
-    with app.app_context():
-        try:
-            db.create_all()
-        except Exception as e:
-            app.logger.exception("Database initialization failed")
-            raise e
+    # Ensure schema is in sync (migrations preferred, safe sync fallback).
+    _apply_migrations_or_sync(app)
+
+    # Seed single admin account.
+    _seed_admin_if_needed(app)
 
     # JWT configuration (access/refresh cookies)
     app.config.setdefault("JWT_TOKEN_LOCATION", ["headers"])
@@ -67,7 +137,7 @@ def create_app(config_name=None):
 
     jwt.init_app(app)
 
-    # Strict CORS: no wildcard origins when cookies/credentials are used.
+    # CORS
     origins = app.config.get("CORS_ORIGINS", "*")
     origin_list = [o.strip() for o in origins.split(",") if o.strip()]
     allow_credentials = "*" not in origin_list
@@ -81,29 +151,25 @@ def create_app(config_name=None):
     register_blueprints(app)
     register_error_handlers(app)
 
-    # Security headers (HelmetAction equivalent)
     @app.after_request
     def set_security_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault(
-            "Referrer-Policy", "no-referrer"
-        )
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault(
             "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
         )
-        # HSTS only for HTTPS in production
         if not app.config.get("DEBUG", False):
             response.headers.setdefault(
-                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
             )
-        # Basic CSP; frontend serves most UI assets. Adjust as needed for Cloudinary domains.
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; img-src 'self' data: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; frame-ancestors 'none'",
+            "default-src 'self'; img-src 'self' data: https:; script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; connect-src 'self' https:; frame-ancestors 'none'",
         )
         return response
-
 
     @app.get("/api/health")
     def health_check():
@@ -122,8 +188,14 @@ def register_blueprints(app):
     from routes.ticket_routes import ticket_bp
     from routes.user_routes import user_bp
     from routes.verification_routes import verification_bp
+    from routes.admin_routes import admin_bp
+    from routes.request_routes import request_bp
+    from routes.bookmark_routes import bookmark_bp
+    from routes.notification_routes import notification_bp
+    from routes.report_routes import report_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
+
     app.register_blueprint(user_bp, url_prefix="/api/user")
     app.register_blueprint(ticket_bp, url_prefix="/api/tickets")
     app.register_blueprint(verification_bp, url_prefix="/api/ticket")
@@ -132,6 +204,13 @@ def register_blueprints(app):
     app.register_blueprint(payment_bp, url_prefix="/api/payment")
     app.register_blueprint(chat_bp, url_prefix="/api/chat")
     app.register_blueprint(rating_bp, url_prefix="/api/rating")
+    app.register_blueprint(request_bp, url_prefix="/api/requests")
+    app.register_blueprint(bookmark_bp, url_prefix="/api/bookmarks")
+    app.register_blueprint(notification_bp, url_prefix="/api/notifications")
+    app.register_blueprint(report_bp, url_prefix="/api/reports")
+
+    # Admin blueprint prefix required by the frontend.
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
 
 def register_error_handlers(app):

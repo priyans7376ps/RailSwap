@@ -31,3 +31,27 @@ def update_profile(user):
 
     db.session.commit()
     return success_response("Profile updated", {"user": user.to_dict()})
+
+
+@user_bp.get("/dashboard/summary")
+@auth_required
+def get_dashboard_summary(user):
+    from models.ticket_model import Ticket
+    from models.ticket_request_model import TicketRequest
+    
+    active_tickets = Ticket.query.filter_by(owner_id=user.id, ticket_status="active").count()
+    completed_tickets = Ticket.query.filter_by(owner_id=user.id, ticket_status="completed").count()
+    active_requests = TicketRequest.query.filter_by(buyer_id=user.id, status="active").count()
+    
+    # We could fetch more stats here based on the models
+    
+    summary = {
+        "active_tickets": active_tickets,
+        "completed_tickets": completed_tickets,
+        "active_requests": active_requests,
+        "trust_score": float(user.trust_score or 100.0),
+        "completed_exchanges": user.completed_exchanges,
+        "cancelled_exchanges": user.cancelled_exchanges
+    }
+    
+    return success_response("Dashboard summary fetched", summary)

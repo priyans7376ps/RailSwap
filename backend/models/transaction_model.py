@@ -14,6 +14,7 @@ class Transaction(db.Model):
     seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     ticket_id = db.Column(db.Integer, db.ForeignKey("tickets.id"), nullable=False, index=True)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
+    platform_commission = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     payment_status = db.Column(db.String(20), nullable=False, default="pending")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
@@ -32,6 +33,7 @@ class Transaction(db.Model):
             "seller_id": self.seller_id,
             "ticket_id": self.ticket_id,
             "amount": float(self.amount or 0),
+            "platform_commission": float(self.platform_commission or 0),
             "payment_status": self.payment_status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

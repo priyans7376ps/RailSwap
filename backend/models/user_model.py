@@ -14,9 +14,16 @@ class User(db.Model):
     phone = db.Column(db.String(20), unique=True, nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     profile_image = db.Column(db.String(255), nullable=True)
+    # Role-based access control for admin portal. Values: "user" | "admin"
+    role = db.Column(db.String(32), nullable=False, default="user", index=True)
     rating = db.Column(db.Numeric(3, 2), nullable=False, default=0)
     is_verified = db.Column(db.Boolean, nullable=False, default=False)
+    completed_exchanges = db.Column(db.Integer, nullable=False, default=0)
+    cancelled_exchanges = db.Column(db.Integer, nullable=False, default=0)
+    trust_score = db.Column(db.Numeric(5, 2), nullable=False, default=100.0)
+    verification_badge = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
 
     tickets = db.relationship("Ticket", back_populates="owner", lazy=True)
 
@@ -34,6 +41,11 @@ class User(db.Model):
             "phone": self.phone,
             "profile_image": self.profile_image,
             "rating": float(self.rating or 0),
+            "role": self.role,
             "is_verified": self.is_verified,
+            "completed_exchanges": self.completed_exchanges,
+            "cancelled_exchanges": self.cancelled_exchanges,
+            "trust_score": float(self.trust_score or 100.0),
+            "verification_badge": self.verification_badge,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

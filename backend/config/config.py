@@ -17,10 +17,17 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or os.getenv("SECRET_KEY", "change-me-in-production")
 
 
-    # Use DATABASE_URL when provided.
-    # If not provided, fallback to SQLite for local dev.
-    # PostgreSQL remains supported for production via DATABASE_URL.
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///railswap.db")
+    # Always default to the repo's local SQLite DB to avoid schema drift.
+    # Existing DB lives at backend/instance/railswap.db
+    _default_sqlite_path = str(BASE_DIR / "instance" / "railswap.db")
+    _default_sqlite_uri = f"sqlite:///{_default_sqlite_path}"
+
+    # If DATABASE_URL is explicitly provided, we will use it.
+    # We no longer hard-crash if the URL is not the default SQLite DB,
+    # as production will likely use PostgreSQL.
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", _default_sqlite_uri)
+
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Access token lifetime

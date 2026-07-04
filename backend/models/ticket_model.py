@@ -3,7 +3,7 @@ from datetime import datetime
 from config.database import db
 
 
-TICKET_STATUSES = ("active", "matched", "completed", "expired", "cancelled")
+TICKET_STATUSES = ("draft", "active", "verified", "published", "matched", "payment_pending", "payment_held", "completed", "expired", "cancelled")
 VERIFICATION_STATUSES = ("pending", "verified", "invalid")
 CLASS_TYPES = ("SL", "3A", "2A", "1A", "CC", "EC", "2S")
 GENDERS = ("male", "female", "other", "any")
@@ -25,7 +25,7 @@ class Ticket(db.Model):
     exchange_price = db.Column(db.Numeric(10, 2), nullable=False)
     ticket_pdf = db.Column(db.String(255), nullable=True)
     verification_status = db.Column(db.String(20), nullable=False, default="pending")
-    ticket_status = db.Column(db.String(20), nullable=False, default="active")
+    ticket_status = db.Column(db.String(30), nullable=False, default="draft")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     owner = db.relationship("User", back_populates="tickets")
