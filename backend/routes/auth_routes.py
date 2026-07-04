@@ -2,11 +2,46 @@ from flask import Blueprint, request
 
 from config.database import db
 from models.user_model import User
-from utils.jwt_helper import generate_token
+from flask import current_app, make_response
+
+from utils.jwt_helper import (
+    generate_access_token,
+    generate_refresh_token,
+)
 from utils.response import error_response, success_response
 from utils.validators import required_fields, validate_email, validate_password, validate_phone
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _clear_refresh_cookie(resp):
+    resp.set_cookie(
+        current_app.config["JWT_REFRESH_COOKIE_NAME"],
+        "",
+        httponly=True,
+        secure=current_app.config["JWT_REFRESH_COOKIE_SECURE"],
+        samesite=current_app.config["JWT_REFRESH_COOKIE_SAMESITE"],
+        domain=current_app.config.get("JWT_REFRESH_COOKIE_DOMAIN") or None,
+        max_age=0,
+        path="/",
+    )
+    return resp
+
+
+@auth_bp.post("/refresh")
+def refresh():
+    """Issue a new access token using the httpOnly refresh cookie."""
+
+    # Proper refresh wiring will be added next; for now we return not implemented.
+    return error_response("Refresh flow not implemented", 501)
+
+
+
+@auth_bp.post("/logout")
+def logout():
+    resp = success_response("Logged out")
+    _clear_refresh_cookie(resp)
+    return resp
 
 
 @auth_bp.post("/register")
@@ -33,11 +68,29 @@ def register():
     db.session.add(user)
     db.session.commit()
 
-    return success_response(
+    access_token = generate_access_token(user)
+    refresh_token = generate_refresh_token(user)
+
+    resp = make_response(success_response(
         "Registration successful",
-        {"user": user.to_dict(), "access_token": generate_token(user)},
+        {"user": user.to_dict(), "access_token": access_token},
         201,
+    ))
+
+    # httpOnly refresh cookie (prevents JS token theft)
+    max_age_seconds = int(current_app.config["JWT_REFRESH_TOKEN_EXPIRES"].total_seconds())
+    resp.set_cookie(
+        current_app.config["JWT_REFRESH_COOKIE_NAME"],
+        refresh_token,
+        httponly=True,
+        secure=current_app.config["JWT_REFRESH_COOKIE_SECURE"],
+        samesite=current_app.config["JWT_REFRESH_COOKIE_SAMESITE"],
+        domain=current_app.config.get("JWT_REFRESH_COOKIE_DOMAIN") or None,
+        max_age=max_age_seconds,
+        path="/",
     )
+
+    return resp
 
 
 @auth_bp.post("/login")
@@ -47,11 +100,48 @@ def login():
     if missing:
         return error_response(missing, 400)
 
-    user = User.query.filter_by(email=payload["email"].lower()).first()
-    if not user or not user.check_password(payload["password"]):
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password")
+
+    # Debug logging (never log raw password)
+    current_app.logger.info("LOGIN attempt received for email=%s", email)
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        current_app.logger.info("LOGIN failed: email not found for email=%s", email)
         return error_response("Invalid email or password", 401)
 
-    return success_response(
-        "Login successful",
-        {"user": user.to_dict(), "access_token": generate_token(user)},
+    ok = user.check_password(password)
+    current_app.logger.info(
+        "LOGIN password verification %s for user_id=%s email=%s",
+        "passed" if ok else "failed",
+        user.id,
+        email,
     )
+
+    if not ok:
+        return error_response("Invalid email or password", 401)
+
+    access_token = generate_access_token(user)
+    refresh_token = generate_refresh_token(user)
+
+
+    resp = make_response(success_response(
+        "Login successful",
+        {"user": user.to_dict(), "access_token": access_token},
+    ))
+
+    # httpOnly refresh cookie (prevents JS token theft)
+    max_age_seconds = int(current_app.config["JWT_REFRESH_TOKEN_EXPIRES"].total_seconds())
+    resp.set_cookie(
+        current_app.config["JWT_REFRESH_COOKIE_NAME"],
+        refresh_token,
+        httponly=True,
+        secure=current_app.config["JWT_REFRESH_COOKIE_SECURE"],
+        samesite=current_app.config["JWT_REFRESH_COOKIE_SAMESITE"],
+        domain=current_app.config.get("JWT_REFRESH_COOKIE_DOMAIN") or None,
+        max_age=max_age_seconds,
+        path="/",
+    )
+
+    return resp

@@ -1,20 +1,50 @@
 import os
+from pathlib import Path
 
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from dotenv import load_dotenv
 
 from config.config import config_by_name
 from config.database import db, init_db
 from utils.response import error_response, success_response
 
+# Load .env at application startup so config reads correct environment variables.
+# Place backend/.env alongside this file (or override via an explicit env var).
+_ENV_PATH = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=str(_ENV_PATH))
+
+
 jwt = JWTManager()
+
 
 
 def create_app(config_name=None):
     app = Flask(__name__)
     env_name = config_name or os.getenv("FLASK_ENV", "development")
     app.config.from_object(config_by_name.get(env_name, config_by_name["development"]))
+
+    # Startup logging to ensure signup/login operate on the same DB.
+    # If you use DATABASE_URL, set it before starting the server.
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI")
+    active_jwt_secret = app.config.get("JWT_SECRET_KEY")
+
+    # Print active SQLAlchemy DB URI during startup.
+    app.logger.info(
+        "Active SQLALCHEMY_DATABASE_URI=%s (FLASK_ENV=%s)",
+        db_uri,
+        env_name,
+    )
+
+    # Also log whether JWT secret is present (do not log secret value).
+    app.logger.info(
+        "JWT_SECRET_KEY loaded: %s",
+        "yes" if active_jwt_secret else "no",
+    )
+
+
+
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -30,11 +60,50 @@ def create_app(config_name=None):
             app.logger.exception("Database initialization failed")
             raise e
 
+    # JWT configuration (access/refresh cookies)
+    app.config.setdefault("JWT_TOKEN_LOCATION", ["headers"])
+    app.config.setdefault("JWT_ACCESS_TOKEN_EXPIRES", app.config.get("JWT_ACCESS_TOKEN_EXPIRES"))
+    app.config.setdefault("JWT_REFRESH_TOKEN_EXPIRES", app.config.get("JWT_REFRESH_TOKEN_EXPIRES"))
+
     jwt.init_app(app)
-    CORS(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
+
+    # Strict CORS: no wildcard origins when cookies/credentials are used.
+    origins = app.config.get("CORS_ORIGINS", "*")
+    origin_list = [o.strip() for o in origins.split(",") if o.strip()]
+    allow_credentials = "*" not in origin_list
+
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": origin_list if origin_list != ["*"] else "*"}},
+        supports_credentials=True if allow_credentials else False,
+    )
 
     register_blueprints(app)
     register_error_handlers(app)
+
+    # Security headers (HelmetAction equivalent)
+    @app.after_request
+    def set_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault(
+            "Referrer-Policy", "no-referrer"
+        )
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
+        # HSTS only for HTTPS in production
+        if not app.config.get("DEBUG", False):
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        # Basic CSP; frontend serves most UI assets. Adjust as needed for Cloudinary domains.
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; frame-ancestors 'none'",
+        )
+        return response
+
 
     @app.get("/api/health")
     def health_check():
