@@ -29,7 +29,7 @@ def admin_login():
         # Requirement: if normal user tries => Access Denied
         if not user.check_password(password):
             return error_response("Invalid email or password", 401)
-        return error_response("Access Denied", 403)
+        return error_response("Access Denied. Administrator privileges required.", 403)
 
     if not user.check_password(password):
         return error_response("Invalid email or password", 401)
@@ -173,12 +173,15 @@ def resolve_report(report_id):
 @jwt_role_required(["admin"])
 def get_settings():
     from models.platform_setting_model import PlatformSetting
-    setting = PlatformSetting.query.first()
-    if not setting:
-        setting = PlatformSetting()
-        db.session.add(setting)
-        db.session.commit()
-    return success_response("Settings fetched", setting.to_dict())
+    settings = PlatformSetting.query.all()
+    # Provide default baseline, but any new key added via PUT will be returned
+    data = {
+        "platform_commission_percent": 5.0,
+        "maintenance_mode": False
+    }
+    for s in settings:
+        data[s.key] = s.value
+    return success_response("Settings fetched", data)
 
 @admin_bp.put("/settings")
 @jwt_role_required(["admin"])
@@ -186,15 +189,289 @@ def update_settings():
     from models.platform_setting_model import PlatformSetting
     payload = request.get_json(silent=True) or {}
     
-    setting = PlatformSetting.query.first()
-    if not setting:
-        setting = PlatformSetting()
-        db.session.add(setting)
+    for k, v in payload.items():
+        s = PlatformSetting.query.filter_by(key=k).first()
+        if not s:
+            s = PlatformSetting(key=k, value=v)
+            db.session.add(s)
+        else:
+            s.value = v
+            
+    db.session.commit()
+    
+    # Return the updated config
+    settings = PlatformSetting.query.all()
+    data = { "platform_commission_percent": 5.0, "maintenance_mode": False }
+    for s in settings:
+        data[s.key] = s.value
         
-    if "platform_commission_percent" in payload:
-        setting.platform_commission_percent = payload["platform_commission_percent"]
-    if "maintenance_mode" in payload:
-        setting.maintenance_mode = payload["maintenance_mode"]
+    return success_response("Settings updated", data)
+
+# --- PROFILE ACTIONS ---
+@admin_bp.get("/profile")
+@jwt_role_required(["admin"])
+def get_profile():
+    from flask_jwt_extended import get_jwt_identity
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return error_response("User not found", 404)
+    return success_response("Profile fetched", {"profile": user.to_dict()})
+
+@admin_bp.put("/profile")
+@jwt_role_required(["admin"])
+def update_profile():
+    from flask_jwt_extended import get_jwt_identity
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return error_response("User not found", 404)
+        
+    payload = request.get_json(silent=True) or {}
+    
+    if "name" in payload:
+        user.name = payload["name"]
+    if "email" in payload:
+        # Check if email is taken by someone else
+        existing = User.query.filter_by(email=payload["email"]).first()
+        if existing and existing.id != user_id:
+            return error_response("Email already in use", 400)
+        user.email = payload["email"]
+    if "phone" in payload:
+        user.phone = payload["phone"]
         
     db.session.commit()
-    return success_response("Settings updated", setting.to_dict())
+    return success_response("Profile updated", {"profile": user.to_dict()})
+
+@admin_bp.put("/change-password")
+@jwt_role_required(["admin"])
+def change_password():
+    from flask_jwt_extended import get_jwt_identity
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return error_response("User not found", 404)
+        
+    payload = request.get_json(silent=True) or {}
+    current_password = payload.get("current_password")
+    new_password = payload.get("new_password")
+    
+    if not current_password or not new_password:
+        return error_response("Missing required fields", 400)
+        
+    if not user.check_password(current_password):
+        return error_response("Invalid current password", 400)
+        
+    if len(new_password) < 6:
+        return error_response("New password must be at least 6 characters long", 400)
+        
+    user.set_password(new_password)
+    db.session.commit()
+    
+    return success_response("Password updated successfully")
+
+
+# --- USERS ACTIONS ---
+@admin_bp.put("/users/<int:user_id>/status")
+@jwt_role_required(["admin"])
+def update_user_status(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return error_response("User not found", 404)
+    payload = request.get_json(silent=True) or {}
+    status = payload.get("status")
+    if status in ["active", "suspended"]:
+        user.status = status
+        db.session.commit()
+        return success_response(f"User {status} successfully")
+    return error_response("Invalid status", 400)
+
+def log_admin_action(action_type, message):
+    from models.system_log_model import SystemLog
+    try:
+        new_log = SystemLog(type=action_type, message=message)
+        db.session.add(new_log)
+        db.session.commit()
+    except:
+        db.session.rollback()
+
+@admin_bp.delete("/users/<int:user_id>")
+@jwt_role_required(["admin"])
+def delete_user(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return error_response("User not found", 404)
+    db.session.delete(user)
+    db.session.commit()
+    log_admin_action("system", f"Admin deleted user ID {user_id}")
+    return success_response("User deleted successfully")
+
+
+# --- TICKETS ---
+@admin_bp.get("/tickets")
+@jwt_role_required(["admin"])
+def list_tickets():
+    from models.ticket_model import Ticket
+    tickets = Ticket.query.order_by(Ticket.created_at.desc()).all()
+    return success_response("Tickets fetched", {"tickets": [t.to_dict() for t in tickets]})
+
+@admin_bp.put("/tickets/<int:ticket_id>/status")
+@jwt_role_required(["admin"])
+def update_ticket_status(ticket_id):
+    from models.ticket_model import Ticket
+    ticket = Ticket.query.get(ticket_id)
+    if not ticket:
+        return error_response("Ticket not found", 404)
+    payload = request.get_json(silent=True) or {}
+    
+    if "status" in payload:
+        ticket.ticket_status = payload["status"]
+    if "verification_status" in payload:
+        ticket.verification_status = payload["verification_status"]
+        
+    db.session.commit()
+    return success_response("Ticket status updated")
+
+@admin_bp.delete("/tickets/<int:ticket_id>")
+@jwt_role_required(["admin"])
+def delete_ticket(ticket_id):
+    from models.ticket_model import Ticket
+    ticket = Ticket.query.get(ticket_id)
+    if not ticket:
+        return error_response("Ticket not found", 404)
+    db.session.delete(ticket)
+    db.session.commit()
+    return success_response("Ticket deleted")
+
+
+# --- VERIFICATIONS ---
+@admin_bp.get("/verifications")
+@jwt_role_required(["admin"])
+def list_verifications():
+    from models.ticket_model import Ticket
+    tickets = Ticket.query.filter_by(verification_status="pending").order_by(Ticket.created_at.desc()).all()
+    return success_response("Pending verifications fetched", {"verifications": [t.to_dict() for t in tickets]})
+
+
+# --- TRANSACTIONS & PAYMENTS ---
+@admin_bp.get("/transactions")
+@jwt_role_required(["admin"])
+def list_transactions():
+    from models.transaction_model import Transaction
+    transactions = Transaction.query.order_by(Transaction.created_at.desc()).all()
+    return success_response("Transactions fetched", {"transactions": [t.to_dict() for t in transactions]})
+
+@admin_bp.put("/transactions/<int:transaction_id>/status")
+@jwt_role_required(["admin"])
+def update_transaction_status(transaction_id):
+    from models.transaction_model import Transaction
+    transaction = Transaction.query.get(transaction_id)
+    if not transaction:
+        return error_response("Transaction not found", 404)
+    payload = request.get_json(silent=True) or {}
+    
+    if "payment_status" in payload:
+        transaction.payment_status = payload["payment_status"]
+    if "transaction_status" in payload:
+        transaction.transaction_status = payload["transaction_status"]
+        
+    db.session.commit()
+    return success_response("Transaction status updated")
+
+@admin_bp.get("/payments")
+@jwt_role_required(["admin"])
+def list_payments():
+    from models.transaction_model import Transaction
+    transactions = Transaction.query.order_by(Transaction.created_at.desc()).all()
+    return success_response("Payments fetched", {"payments": [t.to_dict() for t in transactions]})
+
+
+# --- REPORTS ACTIONS ---
+@admin_bp.delete("/reports/<int:report_id>")
+@jwt_role_required(["admin"])
+def delete_report(report_id):
+    from models.report_model import Report
+    report = Report.query.get(report_id)
+    if not report:
+        return error_response("Report not found", 404)
+    db.session.delete(report)
+    db.session.commit()
+    return success_response("Report deleted")
+
+
+# --- ANALYTICS ---
+@admin_bp.get("/analytics")
+@jwt_role_required(["admin"])
+def get_analytics():
+    from models.transaction_model import Transaction
+    from models.ticket_model import Ticket
+    from datetime import datetime, timedelta
+    
+    today = datetime.utcnow().date()
+    days = 7
+    revenue_trend = [0] * days
+    ticket_uploads = [0] * days
+    
+    # Generate labels (optional, but good for reference if frontend wants it)
+    labels = []
+    
+    for i in range(days):
+        target_date = today - timedelta(days=(days - 1 - i))
+        labels.append(target_date.strftime("%Y-%m-%d"))
+        
+        # Calculate revenue for that day
+        daily_tx = Transaction.query.filter(
+            func.date(Transaction.created_at) == target_date
+        ).all()
+        daily_rev = sum(float(tx.platform_commission or 0) for tx in daily_tx)
+        revenue_trend[i] = daily_rev
+        
+        # Calculate ticket uploads for that day
+        daily_tkts = Ticket.query.filter(
+            func.date(Ticket.created_at) == target_date
+        ).count()
+        ticket_uploads[i] = daily_tkts
+        
+    return success_response("Analytics fetched", {"data": {
+        "revenue_trend": revenue_trend,
+        "ticket_uploads": ticket_uploads,
+        "labels": labels
+    }})
+
+
+# --- NOTIFICATIONS ---
+@admin_bp.post("/notifications/broadcast")
+@jwt_role_required(["admin"])
+def broadcast_notification():
+    from models.notification_model import Notification
+    payload = request.get_json(silent=True) or {}
+    message = payload.get("message")
+    if not message:
+        return error_response("Message required", 400)
+        
+    # Get all active users
+    users = User.query.filter(User.status == "active").all()
+    
+    # Create notification for each user
+    count = 0
+    for u in users:
+        notification = Notification(
+            user_id=u.id,
+            title="System Alert",
+            message=message,
+            type="alert"
+        )
+        db.session.add(notification)
+        count += 1
+        
+    db.session.commit()
+    return success_response(f"Broadcast sent successfully to {count} users")
+
+
+# --- LOGS ---
+@admin_bp.get("/logs")
+@jwt_role_required(["admin"])
+def get_logs():
+    from models.system_log_model import SystemLog
+    logs = SystemLog.query.order_by(SystemLog.timestamp.desc()).limit(100).all()
+    return success_response("Logs fetched", {"logs": [log.to_dict() for log in logs]})

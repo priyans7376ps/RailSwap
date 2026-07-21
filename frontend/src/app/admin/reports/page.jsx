@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { RequireAdminAuth } from '../protected/requireAdminAuth';
-import { apiRequest } from '../../../services/api';
+import { adminListReports, adminResolveReport, adminDeleteReport, adminUpdateUserStatus, adminDeleteTicket } from '../../../services/api';
 
 export default function AdminReportsPage() {
   return (
@@ -16,27 +16,42 @@ function ReportsDashboard() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [processingId, setProcessingId] = useState(null);
+
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      const res = await adminListReports();
+      const list = res?.data || res?.reports || res || [];
+      setReports(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setError(e?.message || 'Failed to load reports.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        // Need to create this admin endpoint in backend later if it doesn't exist
-        const res = await apiRequest({ method: "GET", url: "/api/reports/admin" });
-        setReports(res?.data || res || []);
-      } catch (e) {
-        setError(e?.message || 'Failed to load reports. Endpoint might not be implemented yet.');
-      } finally {
-        setLoading(false);
-      }
-    })();
+    fetchReports();
   }, []);
 
-  const resolveReport = async (id) => {
+  const handleAction = async (id, actionType, relatedId = null) => {
     try {
-      await apiRequest({ method: "PUT", url: `/api/reports/admin/${id}/resolve` });
-      setReports(reports.map(r => r.id === id ? { ...r, status: 'resolved' } : r));
+      setProcessingId(id);
+      if (actionType === 'resolve') {
+        await adminResolveReport(id);
+      } else if (actionType === 'delete_report') {
+        await adminDeleteReport(id);
+      } else if (actionType === 'suspend_user') {
+        await adminUpdateUserStatus(relatedId, 'suspended');
+      } else if (actionType === 'delete_listing') {
+        await adminDeleteTicket(relatedId);
+      }
+      await fetchReports();
     } catch (e) {
-      alert("Failed to resolve report: " + (e?.message || ""));
+      alert("Failed to execute action: " + (e?.message || ""));
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -47,7 +62,7 @@ function ReportsDashboard() {
         <p className="text-sm text-slate-400">Handle user reports for fraud and inappropriate behavior.</p>
       </div>
 
-      {loading && (
+      {loading && reports.length === 0 && (
         <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6 text-slate-300">
           Loading...
         </div>
@@ -65,7 +80,7 @@ function ReportsDashboard() {
         </div>
       )}
 
-      {!loading && reports.length > 0 && (
+      {(!loading || reports.length > 0) && !error && reports.length > 0 && (
         <div className="mt-6 space-y-4">
           {reports.map((report) => (
             <div key={report.id} className="rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -74,22 +89,57 @@ function ReportsDashboard() {
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-white uppercase text-sm">REP-{report.id}</span>
                     <span className={`px-2 py-1 text-xs rounded-full font-bold ${
-                      report.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                      report.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-300' : 
+                      report.status === 'dismissed' ? 'bg-slate-500/20 text-slate-300' : 
+                      'bg-rose-500/20 text-rose-300'
                     }`}>
                       {report.status}
                     </span>
+                    <span className="text-xs text-slate-400">{new Date(report.created_at).toLocaleString()}</span>
                   </div>
-                  <p className="mt-2 text-slate-300">Reason: {report.reason}</p>
-                  <p className="mt-1 text-slate-400 text-sm">{report.description}</p>
+                  <div className="mt-2 text-sm text-slate-300 flex flex-col gap-1">
+                    <span><strong>Reporter ID:</strong> {report.reporter_id}</span>
+                    {report.reported_user_id && <span><strong>Reported User ID:</strong> {report.reported_user_id}</span>}
+                    {report.ticket_id && <span><strong>Ticket ID:</strong> {report.ticket_id}</span>}
+                    <span className="mt-1"><strong>Reason:</strong> {report.reason}</span>
+                  </div>
                 </div>
-                {report.status === 'pending' && (
+                <div className="flex flex-col gap-2 items-end">
+                  {report.status === 'pending' && (
+                    <button 
+                      onClick={() => handleAction(report.id, 'resolve')}
+                      disabled={processingId === report.id}
+                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-300 rounded-lg hover:bg-emerald-500/30 text-xs font-semibold transition disabled:opacity-50"
+                    >
+                      Resolve Report
+                    </button>
+                  )}
+                  {report.reported_user_id && (
+                    <button 
+                      onClick={() => handleAction(report.id, 'suspend_user', report.reported_user_id)}
+                      disabled={processingId === report.id}
+                      className="px-3 py-1.5 bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 text-xs font-semibold transition disabled:opacity-50"
+                    >
+                      Suspend User
+                    </button>
+                  )}
+                  {report.ticket_id && (
+                    <button 
+                      onClick={() => handleAction(report.id, 'delete_listing', report.ticket_id)}
+                      disabled={processingId === report.id}
+                      className="px-3 py-1.5 bg-rose-500/20 text-rose-300 rounded-lg hover:bg-rose-500/30 text-xs font-semibold transition disabled:opacity-50"
+                    >
+                      Delete Ticket Listing
+                    </button>
+                  )}
                   <button 
-                    onClick={() => resolveReport(report.id)}
-                    className="px-4 py-2 bg-emerald-500/20 text-emerald-300 rounded-lg hover:bg-emerald-500/30 text-sm font-semibold transition"
+                    onClick={() => handleAction(report.id, 'delete_report')}
+                    disabled={processingId === report.id}
+                    className="px-3 py-1.5 bg-white/5 text-slate-300 rounded-lg hover:bg-white/10 text-xs font-semibold transition disabled:opacity-50"
                   >
-                    Resolve
+                    Delete Report
                   </button>
-                )}
+                </div>
               </div>
             </div>
           ))}

@@ -12,7 +12,7 @@ export default function AdminShell({ children }) {
   );
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-200">
+    <div className="min-h-screen bg-[#050505] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950/30 via-[#050505] to-black text-slate-200 selection:bg-cyan-500/30 font-sans">
       <AdminSidebar />
 
       <div className="md:pl-64">

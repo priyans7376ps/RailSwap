@@ -9,9 +9,10 @@ from models.search_history_model import SearchHistory
 from models.notification_model import Notification
 from models.report_model import Report
 from models.platform_setting_model import PlatformSetting
+from models.system_log_model import SystemLog
 
 __all__ = [
     "Message", "Rating", "Ticket", "Transaction", "User",
     "TicketRequest", "SavedTicket", "SearchHistory", "Notification",
-    "Report", "PlatformSetting"
+    "Report", "PlatformSetting", "SystemLog"
 ]

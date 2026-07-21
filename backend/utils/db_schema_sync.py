@@ -23,6 +23,7 @@ from config.config import Config
 REQUIRED_USER_COLUMNS = {
     # name: (DDL, sqlite_type)
     "role": "VARCHAR(32) NOT NULL DEFAULT 'user'",
+    "status": "VARCHAR(20) NOT NULL DEFAULT 'active'",
     "rating": "NUMERIC(3, 2) NOT NULL DEFAULT 0",
     "is_verified": "BOOLEAN NOT NULL DEFAULT 0",
     "profile_image": "VARCHAR(255) NULL",

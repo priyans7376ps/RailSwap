@@ -10,7 +10,6 @@ import AdminNavbar from '../../../components/admin/AdminNavbar';
 export default function AdminLoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,7 +43,7 @@ export default function AdminLoginPage() {
             setLoading(true);
 
             try {
-              const res = await adminLogin({ email, password });
+              const res = await adminLogin({ email: 'singh876580@gmail.com', password });
               const token = res?.access_token || res?.data?.access_token || res?.data?.data?.access_token;
               if (!token) throw new Error('Access token missing');
 
@@ -63,17 +62,6 @@ export default function AdminLoginPage() {
             }
           }}
         >
-          <label className="block space-y-2">
-            <span className="label">Email</span>
-            <input
-              className="field"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@railswap.com"
-              type="email"
-              required
-            />
-          </label>
 
           <label className="block space-y-2">
             <span className="label">Password</span>

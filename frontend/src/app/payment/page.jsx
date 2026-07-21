@@ -6,7 +6,7 @@ import { CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import PaymentCard from '../../components/PaymentCard';
 import RequireAuth from '../../components/RequireAuth';
-import { searchTickets, startPayment } from '../../services/api';
+import { getTicket, startPayment } from '../../services/api';
 
 export default function PaymentPage() {
   return (
@@ -37,13 +37,10 @@ function PaymentContent() {
 
     (async () => {
       try {
-        // Fetch tickets and find the specific one. 
-        // In a real app we'd have a GET /tickets/:id endpoint.
-        const res = await searchTickets({});
-        const list = res?.data?.tickets || res?.tickets || [];
-        const found = list.find((t) => String(t.id) === String(ticketId));
+        const res = await getTicket(ticketId);
+        const found = res?.data?.ticket || res?.ticket || res;
         
-        if (found) {
+        if (found && found.id) {
           setTicket(found);
         } else {
           setError('Ticket not found or no longer available.');

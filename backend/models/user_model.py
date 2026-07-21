@@ -14,8 +14,8 @@ class User(db.Model):
     phone = db.Column(db.String(20), unique=True, nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     profile_image = db.Column(db.String(255), nullable=True)
-    # Role-based access control for admin portal. Values: "user" | "admin"
     role = db.Column(db.String(32), nullable=False, default="user", index=True)
+    status = db.Column(db.String(20), nullable=False, default="active")
     rating = db.Column(db.Numeric(3, 2), nullable=False, default=0)
     is_verified = db.Column(db.Boolean, nullable=False, default=False)
     completed_exchanges = db.Column(db.Integer, nullable=False, default=0)
@@ -42,6 +42,7 @@ class User(db.Model):
             "profile_image": self.profile_image,
             "rating": float(self.rating or 0),
             "role": self.role,
+            "status": self.status,
             "is_verified": self.is_verified,
             "completed_exchanges": self.completed_exchanges,
             "cancelled_exchanges": self.cancelled_exchanges,

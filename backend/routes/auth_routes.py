@@ -30,10 +30,33 @@ def _clear_refresh_cookie(resp):
 
 @auth_bp.post("/refresh")
 def refresh():
-    """Issue a new access token using the httpOnly refresh cookie."""
+    """Issue a new access token using the httpOnly refresh cookie or auth header."""
+    cookie_name = current_app.config["JWT_REFRESH_COOKIE_NAME"]
+    refresh_token = request.cookies.get(cookie_name)
+    if not refresh_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            refresh_token = auth_header.split(" ")[1]
 
-    # Proper refresh wiring will be added next; for now we return not implemented.
-    return error_response("Refresh flow not implemented", 501)
+    if not refresh_token:
+        return error_response("Refresh token missing", 401)
+
+    try:
+        from flask_jwt_extended import decode_token
+        decoded = decode_token(refresh_token)
+        if decoded.get("type") != "refresh":
+            return error_response("Invalid refresh token type", 401)
+
+        user_id = decoded.get("sub")
+        user = User.query.get(user_id)
+        if not user or user.status == "suspended":
+            return error_response("User account disabled or not found", 401)
+
+        new_access_token = generate_access_token(user)
+        return success_response("Token refreshed", {"access_token": new_access_token})
+    except Exception as exc:
+        return error_response("Invalid or expired refresh token", 401)
+
 
 
 

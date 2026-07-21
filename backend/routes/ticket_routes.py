@@ -42,8 +42,11 @@ def create_ticket(user):
     class_type = payload["class_type"].upper()
     gender = payload["passenger_gender"].lower()
 
+    from datetime import date
     if not journey_date:
         return error_response("Invalid journey_date. Use YYYY-MM-DD", 400)
+    if journey_date < date.today():
+        return error_response("Journey date cannot be in the past", 400)
     if class_type not in CLASS_TYPES:
         return error_response(f"Invalid class_type. Allowed: {', '.join(CLASS_TYPES)}", 400)
     if gender not in GENDERS:
@@ -58,7 +61,10 @@ def create_ticket(user):
     except ValueError as exc:
         return error_response(str(exc), 400)
 
+    # Initial verification check on PNR format and duplicate status
     verification = verify_pnr(payload["pnr_number"])
+    initial_verification_status = "verified" if validate_pnr(payload["pnr_number"]) else "pending"
+
     ticket = Ticket(
         owner_id=user.id,
         pnr_number=payload["pnr_number"],
@@ -71,7 +77,7 @@ def create_ticket(user):
         original_price=original_price,
         exchange_price=exchange_price,
         ticket_pdf=ticket_pdf,
-        verification_status="verified" if verification["valid"] else "invalid",
+        verification_status=initial_verification_status,
         ticket_status="active",
     )
     db.session.add(ticket)

@@ -73,8 +73,12 @@ def _seed_admin_if_needed(app: Flask) -> None:
 
         from models.user_model import User
 
-        admin_email = os.getenv("ADMIN_EMAIL", "admin@railswap.com")
-        admin_password = os.getenv("ADMIN_PASSWORD", "Admin@1234")
+        admin_email = os.getenv("DEFAULT_ADMIN_EMAIL")
+        admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD")
+        
+        if not admin_email or not admin_password:
+            return
+
         email_norm = admin_email.lower()
 
         admin_user = None
@@ -90,12 +94,12 @@ def _seed_admin_if_needed(app: Flask) -> None:
                 phone=None,
                 role="admin",
             )
+            admin_user.set_password(admin_password)
             db.session.add(admin_user)
 
         # Enforce expected values.
         admin_user.role = "admin"
         admin_user.name = admin_user.name or "Admin"
-        admin_user.set_password(admin_password)
 
         # Prevent creation of additional admins (best-effort).
         try:
@@ -201,6 +205,7 @@ def register_blueprints(app):
     app.register_blueprint(verification_bp, url_prefix="/api/ticket")
     app.register_blueprint(search_bp, url_prefix="/api/tickets")
     app.register_blueprint(matching_bp, url_prefix="/api/matching")
+    app.register_blueprint(matching_bp, url_prefix="/api/matches", name="matches_bp")
     app.register_blueprint(payment_bp, url_prefix="/api/payment")
     app.register_blueprint(chat_bp, url_prefix="/api/chat")
     app.register_blueprint(rating_bp, url_prefix="/api/rating")

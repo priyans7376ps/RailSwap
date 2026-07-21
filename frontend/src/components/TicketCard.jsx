@@ -1,15 +1,17 @@
-import { useState } from 'react';
-import { BadgeCheck, CalendarDays, IndianRupee, TrainFront, UserRound, Bookmark, BookmarkCheck } from 'lucide-react';
-import { formatCurrency, formatDate } from '../utils/formatters';
-import { saveTicket, removeSavedTicket } from '../services/api';
+'use client';
 
-export default function TicketCard({ ticket, compact = false }) {
-  const [isSaved, setIsSaved] = useState(false); // Can be prop from parent if known
-  
+import { useState } from 'react';
+import Link from 'next/link';
+import { BadgeCheck, CalendarDays, IndianRupee, TrainFront, UserRound, Bookmark, BookmarkCheck, ShoppingCart } from 'lucide-react';
+import { formatCurrency, formatDate } from '../utils/formatters';
+import { saveTicket } from '../services/api';
+
+export default function TicketCard({ ticket, compact = false, actionText = 'Buy Ticket' }) {
+  const [isSaved, setIsSaved] = useState(false);
+
   const handleSaveToggle = async () => {
     try {
       if (isSaved) {
-        // Mock remove, as we might not have saved_ticket_id here
         setIsSaved(false);
       } else {
         await saveTicket(ticket.id);
@@ -64,7 +66,13 @@ export default function TicketCard({ ticket, compact = false }) {
           <p className="text-sm text-slate-500">
             Seller <span className="font-semibold text-slate-800">{seller}</span>
           </p>
-          <button className="btn-primary px-4 py-2">View match</button>
+          <Link 
+            href={`/payment?ticket_id=${ticket.id}`}
+            className="btn-primary px-4 py-2 inline-flex items-center gap-1.5"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            {actionText}
+          </Link>
         </div>
       )}
     </article>

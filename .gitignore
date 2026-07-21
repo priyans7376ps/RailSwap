@@ -32,3 +32,17 @@ node_modules/
 # Environment files
 .env
 .env.local
+
+# Python / Flask
+__pycache__/
+*.py[cod]
+*$py.class
+*.db
+instance/
+backend/instance/
+backend/uploads/
+uploads/
+backend-server.err.log
+backend-server.out.log
+venv/
+.venv/

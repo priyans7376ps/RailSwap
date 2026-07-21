@@ -71,3 +71,16 @@ def auth_required(fn):
 
     return wrapper
 
+
+def optional_auth(fn):
+    """Allows optional access token, passing user if logged in or None if guest."""
+
+    @wraps(fn)
+    @jwt_required(optional=True)
+    def wrapper(*args, **kwargs):
+        user = current_user()
+        return fn(user, *args, **kwargs)
+
+    return wrapper
+
+

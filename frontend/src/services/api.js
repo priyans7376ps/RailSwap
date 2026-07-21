@@ -20,7 +20,11 @@ function clearToken() {
 
 function redirectToLogin() {
   if (typeof window === "undefined") return;
-  window.location.href = "/login";
+  if (window.location.pathname.startsWith("/admin")) {
+    window.location.href = "/admin/login";
+  } else {
+    window.location.href = "/login";
+  }
 }
 
 // =========================
@@ -214,6 +218,9 @@ export const searchTickets = (params) => {
   return apiRequest({ method: "GET", url: `/api/tickets/search?${query}` });
 };
 
+export const getTicket = (id) =>
+  apiRequest({ method: "GET", url: `/api/tickets/${id}` });
+
 export const getMyTickets = () =>
   apiRequest({ method: "GET", url: "/api/tickets/mine" });
 
@@ -328,6 +335,66 @@ export const adminListUsers = (params = {}) => {
   const query = new URLSearchParams(params).toString();
   return apiRequest({ method: "GET", url: `/api/admin/users${query ? `?${query}` : ""}` });
 };
+
+export const adminUpdateUserStatus = (id, status) =>
+  apiRequest({ method: "PUT", url: `/api/admin/users/${id}/status`, data: { status } });
+
+export const adminDeleteUser = (id) =>
+  apiRequest({ method: "DELETE", url: `/api/admin/users/${id}` });
+
+export const adminListTickets = () =>
+  apiRequest({ method: "GET", url: "/api/admin/tickets" });
+
+export const adminUpdateTicketStatus = (id, data) =>
+  apiRequest({ method: "PUT", url: `/api/admin/tickets/${id}/status`, data });
+
+export const adminDeleteTicket = (id) =>
+  apiRequest({ method: "DELETE", url: `/api/admin/tickets/${id}` });
+
+export const adminListVerifications = () =>
+  apiRequest({ method: "GET", url: "/api/admin/verifications" });
+
+export const adminListTransactions = () =>
+  apiRequest({ method: "GET", url: "/api/admin/transactions" });
+
+export const adminUpdateTransactionStatus = (id, data) =>
+  apiRequest({ method: "PUT", url: `/api/admin/transactions/${id}/status`, data });
+
+export const adminListPayments = () =>
+  apiRequest({ method: "GET", url: "/api/admin/payments" });
+
+export const adminListReports = () =>
+  apiRequest({ method: "GET", url: "/api/admin/reports" });
+
+export const adminResolveReport = (id) =>
+  apiRequest({ method: "PUT", url: `/api/admin/reports/${id}/resolve` });
+
+export const adminDeleteReport = (id) =>
+  apiRequest({ method: "DELETE", url: `/api/admin/reports/${id}` });
+
+export const adminGetAnalytics = () =>
+  apiRequest({ method: "GET", url: "/api/admin/analytics" });
+
+export const adminBroadcastNotification = (message) =>
+  apiRequest({ method: "POST", url: "/api/admin/notifications/broadcast", data: { message } });
+
+export const adminGetSettings = () =>
+  apiRequest({ method: "GET", url: "/api/admin/settings" });
+
+export const adminUpdateSettings = (data) =>
+  apiRequest({ method: "PUT", url: "/api/admin/settings", data });
+
+export const adminGetProfile = () =>
+  apiRequest({ method: "GET", url: "/api/admin/profile" });
+
+export const adminUpdateProfile = (data) =>
+  apiRequest({ method: "PUT", url: "/api/admin/profile", data });
+
+export const adminChangePassword = (data) =>
+  apiRequest({ method: "PUT", url: "/api/admin/change-password", data });
+
+export const adminGetLogs = () =>
+  apiRequest({ method: "GET", url: "/api/admin/logs" });
 
 // =========================
 // HELPERS

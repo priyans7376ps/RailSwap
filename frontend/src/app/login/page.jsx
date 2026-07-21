@@ -105,6 +105,11 @@ function LoginContent() {
               Create account
             </Link>
           </p>
+          <p className="mt-2 text-center text-xs text-slate-400">
+            <Link className="font-bold hover:text-slate-600 transition" href="/admin/login">
+              Admin Login
+            </Link>
+          </p>
         </div>
       </main>
     </>
