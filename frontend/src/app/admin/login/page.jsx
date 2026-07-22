@@ -3,19 +3,21 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Eye, EyeOff } from 'lucide-react';
 import { adminLogin } from '../../../services/api';
-
+import { useAuth } from '../../../hooks/useAuth';
 import AdminNavbar from '../../../components/admin/AdminNavbar';
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const { refreshUser } = useAuth();
 
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // If already admin, go to dashboard.
     const payload = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('access_token_payload') || 'null') : null;
     if (payload?.role === 'admin') router.replace('/admin/dashboard');
   }, [router]);
@@ -48,14 +50,13 @@ export default function AdminLoginPage() {
               if (!token) throw new Error('Access token missing');
 
               localStorage.setItem('access_token', token);
-              // Cache token payload for quick client-side guard.
               const payload = getDecodedJwtPayload(token);
               localStorage.setItem('access_token_payload', JSON.stringify(payload));
+              await refreshUser();
 
               router.push('/admin/dashboard');
             } catch (err) {
               const msg = err?.message || err?.raw?.message || err?.raw?.error;
-              // Requirement: if normal user tries => show "Access Denied"
               setError(msg === 'Access Denied' ? 'Access Denied' : (msg || 'Login failed'));
             } finally {
               setLoading(false);
@@ -65,14 +66,24 @@ export default function AdminLoginPage() {
 
           <label className="block space-y-2">
             <span className="label">Password</span>
-            <input
-              className="field"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              type="password"
-              required
-            />
+            <div className="relative">
+              <input
+                className="field pr-10"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                type={showPassword ? 'text' : 'password'}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </label>
 
           {error && (
@@ -111,4 +122,3 @@ function getDecodedJwtPayload(token) {
     return null;
   }
 }
-

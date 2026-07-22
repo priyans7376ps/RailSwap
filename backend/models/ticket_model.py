@@ -2,9 +2,22 @@ from datetime import datetime
 
 from config.database import db
 
-
-TICKET_STATUSES = ("draft", "active", "verified", "published", "matched", "payment_pending", "payment_held", "completed", "expired", "cancelled")
-VERIFICATION_STATUSES = ("pending", "verified", "invalid")
+TICKET_STATUSES = (
+    "draft",
+    "pending_verification",
+    "verified",
+    "published",
+    "active",
+    "requested",
+    "matched",
+    "payment_pending",
+    "payment_held",
+    "completed",
+    "expired",
+    "rejected",
+    "cancelled",
+)
+VERIFICATION_STATUSES = ("pending", "verified", "invalid", "rejected")
 CLASS_TYPES = ("SL", "3A", "2A", "1A", "CC", "EC", "2S")
 GENDERS = ("male", "female", "other", "any")
 

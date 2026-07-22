@@ -52,11 +52,10 @@ def _apply_migrations_or_sync(app: Flask) -> None:
                 alembic_exc,
             )
 
-        # Safe repair: only adds missing columns; never drops tables.
-        from utils.db_schema_sync import sync_sqlite_users_table
+        from utils.db_schema_sync import sync_sqlite_users_table, sync_sqlite_tickets_table
 
-        # Ensure all tables exist in SQLite fallback
         if db_uri and db_uri.startswith("sqlite:///"):
+            sync_sqlite_tickets_table(db_uri)
             db.create_all()
 
         sync_sqlite_users_table(db_uri)
@@ -94,21 +93,13 @@ def _seed_admin_if_needed(app: Flask) -> None:
                 phone=None,
                 role="admin",
             )
-            admin_user.set_password(admin_password)
             db.session.add(admin_user)
 
-        # Enforce expected values.
+        admin_user.set_password(admin_password)
         admin_user.role = "admin"
         admin_user.name = admin_user.name or "Admin"
-
-        # Prevent creation of additional admins (best-effort).
-        try:
-            (
-                User.query.filter(User.role == "admin", User.email != email_norm)
-                .update({"role": "user"}, synchronize_session=False)
-            )
-        except Exception:
-            pass
+        db.session.commit()
+        app.logger.info("Admin password synced successfully for %s", email_norm)
 
         db.session.commit()
 
@@ -192,6 +183,7 @@ def register_blueprints(app):
     from routes.ticket_routes import ticket_bp
     from routes.user_routes import user_bp
     from routes.verification_routes import verification_bp
+    from routes.pnr_routes import pnr_bp
     from routes.admin_routes import admin_bp
     from routes.request_routes import request_bp
     from routes.bookmark_routes import bookmark_bp
@@ -202,6 +194,7 @@ def register_blueprints(app):
 
     app.register_blueprint(user_bp, url_prefix="/api/user")
     app.register_blueprint(ticket_bp, url_prefix="/api/tickets")
+    app.register_blueprint(pnr_bp, url_prefix="/api/pnr")
     app.register_blueprint(verification_bp, url_prefix="/api/ticket")
     app.register_blueprint(search_bp, url_prefix="/api/tickets")
     app.register_blueprint(matching_bp, url_prefix="/api/matching")
@@ -212,7 +205,9 @@ def register_blueprints(app):
     app.register_blueprint(request_bp, url_prefix="/api/requests")
     app.register_blueprint(bookmark_bp, url_prefix="/api/bookmarks")
     app.register_blueprint(notification_bp, url_prefix="/api/notifications")
-    app.register_blueprint(report_bp, url_prefix="/api/reports")
+    from routes.transaction_routes import transaction_bp
+
+    app.register_blueprint(transaction_bp, url_prefix="/api/transactions")
 
     # Admin blueprint prefix required by the frontend.
     app.register_blueprint(admin_bp, url_prefix="/api/admin")

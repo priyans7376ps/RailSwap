@@ -475,3 +475,145 @@ def get_logs():
     from models.system_log_model import SystemLog
     logs = SystemLog.query.order_by(SystemLog.timestamp.desc()).limit(100).all()
     return success_response("Logs fetched", {"logs": [log.to_dict() for log in logs]})
+
+
+# --- PHASE 8 LISTING & REQUEST MANAGEMENT ---
+@admin_bp.put("/tickets/<int:ticket_id>/approve")
+@jwt_role_required(["admin"])
+def admin_approve_ticket(ticket_id):
+    from models.ticket_model import Ticket
+    from models.status_history_model import StatusHistory
+    from services.notification_service import create_notification
+
+    ticket = Ticket.query.get(ticket_id)
+    if not ticket:
+        return error_response("Ticket not found", 404)
+
+    old_status = ticket.ticket_status
+    ticket.ticket_status = "published"
+    ticket.verification_status = "verified"
+
+    sh = StatusHistory(
+        ticket_id=ticket.id,
+        old_status=old_status,
+        new_status="published",
+        notes="Admin approved listing"
+    )
+    db.session.add(sh)
+    db.session.commit()
+
+    create_notification(
+        user_id=ticket.owner_id,
+        title="Listing Approved",
+        message=f"Your ticket PNR {ticket.pnr_number} has been approved by admin and is now live.",
+        type="system"
+    )
+    return success_response("Ticket listing approved successfully", {"ticket": ticket.to_dict()})
+
+
+@admin_bp.put("/tickets/<int:ticket_id>/reject")
+@jwt_role_required(["admin"])
+def admin_reject_ticket(ticket_id):
+    from models.ticket_model import Ticket
+    from models.status_history_model import StatusHistory
+    from services.notification_service import create_notification
+
+    payload = request.get_json(silent=True) or {}
+    reason = payload.get("reason", "Admin rejected listing")
+
+    ticket = Ticket.query.get(ticket_id)
+    if not ticket:
+        return error_response("Ticket not found", 404)
+
+    old_status = ticket.ticket_status
+    ticket.ticket_status = "rejected"
+    ticket.verification_status = "invalid"
+
+    sh = StatusHistory(
+        ticket_id=ticket.id,
+        old_status=old_status,
+        new_status="rejected",
+        notes=f"Admin rejected: {reason}"
+    )
+    db.session.add(sh)
+    db.session.commit()
+
+    create_notification(
+        user_id=ticket.owner_id,
+        title="Listing Rejected",
+        message=f"Your ticket PNR {ticket.pnr_number} was rejected by admin: {reason}",
+        type="alert"
+    )
+    return success_response("Ticket listing rejected", {"ticket": ticket.to_dict()})
+
+
+@admin_bp.delete("/tickets/<int:ticket_id>/force-remove")
+@jwt_role_required(["admin"])
+def admin_force_remove_ticket(ticket_id):
+    from models.ticket_model import Ticket
+    from services.notification_service import create_notification
+
+    ticket = Ticket.query.get(ticket_id)
+    if not ticket:
+        return error_response("Ticket not found", 404)
+
+    owner_id = ticket.owner_id
+    pnr = ticket.pnr_number
+
+    db.session.delete(ticket)
+    db.session.commit()
+
+    create_notification(
+        user_id=owner_id,
+        title="Listing Removed",
+        message=f"Your ticket listing PNR {pnr} was removed by admin.",
+        type="alert"
+    )
+    return success_response("Ticket listing force removed by admin")
+
+
+@admin_bp.get("/exchanges/history")
+@jwt_role_required(["admin"])
+def admin_exchange_history():
+    from models.exchange_request_model import ExchangeRequest
+    reqs = ExchangeRequest.query.order_by(ExchangeRequest.created_at.desc()).all()
+    return success_response("Exchange history fetched", {"exchanges": [r.to_dict() for r in reqs]})
+
+
+@admin_bp.get("/tickets/history")
+@jwt_role_required(["admin"])
+def admin_listing_history():
+    from models.status_history_model import StatusHistory
+    histories = StatusHistory.query.order_by(StatusHistory.created_at.desc()).all()
+    return success_response("Listing history audit log fetched", {"history": [h.to_dict() for h in histories]})
+
+
+# --- PHASE 9 ADMIN TRANSACTION CONTROLS ---
+@admin_bp.get("/transactions/all")
+@jwt_role_required(["admin"])
+def admin_all_transactions():
+    from models.transaction_model import Transaction
+    status = request.args.get("status")
+    query = request.args.get("query", "").strip()
+
+    q = Transaction.query
+
+    if status and status != "all":
+        q = q.filter(Transaction.payment_status == status)
+
+    txns = q.order_by(Transaction.created_at.desc()).all()
+    results = [t.to_dict() for t in txns]
+
+    if query:
+        query_lower = query.lower()
+        results = [
+            t for t in results
+            if query_lower in str(t["id"])
+            or query_lower in str(t.get("buyer", {}).get("name", "")).lower()
+            or query_lower in str(t.get("seller", {}).get("name", "")).lower()
+            or query_lower in str(t.get("ticket", {}).get("pnr_number", "")).lower()
+        ]
+
+    return success_response("Admin transactions fetched", {"transactions": results})
+
+

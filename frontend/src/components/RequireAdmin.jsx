@@ -1,17 +1,25 @@
 'use client';
 
-import { useEffect } from 'react';
-
+import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
 export default function RequireAdmin({ children }) {
-  const { authLoading, user } = useAuth();
+  const { authLoading, user, refreshUser } = useAuth();
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // No redirects here; just gate content deterministically.
+    refreshUser().finally(() => {
+      setChecking(false);
+    });
   }, []);
 
-  if (authLoading) {
+  const storedPayload = typeof window !== 'undefined'
+    ? JSON.parse(localStorage.getItem('access_token_payload') || 'null')
+    : null;
+
+  const isAdmin = user?.role === 'admin' || storedPayload?.role === 'admin';
+
+  if (authLoading && checking && !isAdmin) {
     return (
       <div className="page-shell py-10">
         <div className="rounded-[2rem] bg-slate-50 p-8 shadow-sm">
@@ -22,8 +30,7 @@ export default function RequireAdmin({ children }) {
     );
   }
 
-  // Authenticated but non-admin => 403 Forbidden.
-  if (!user || user?.role !== 'admin') {
+  if (!isAdmin) {
     return (
       <div className="page-shell py-10">
         <div className="rounded-[2rem] border border-rose-200 bg-rose-50 p-8">
@@ -38,4 +45,3 @@ export default function RequireAdmin({ children }) {
 
   return children;
 }
-

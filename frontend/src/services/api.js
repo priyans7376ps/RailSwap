@@ -150,8 +150,10 @@ export const getDashboardSummary = () =>
 // TICKETS
 // =========================
 
-export const verifyTicket = (data) =>
-  apiRequest({ method: "POST", url: "/api/ticket/verify", data });
+export const verifyTicket = (data) => {
+  const pnr = typeof data === "string" ? data : (data?.pnr || data?.pnr_number);
+  return apiRequest({ method: "POST", url: "/api/pnr/verify", data: { pnr } });
+};
 
 export const uploadTicketWithProgress = ({ formData, onProgress }) => {
   if (!(formData instanceof FormData)) {
@@ -221,8 +223,99 @@ export const searchTickets = (params) => {
 export const getTicket = (id) =>
   apiRequest({ method: "GET", url: `/api/tickets/${id}` });
 
+export const getListingDetails = (id) =>
+  apiRequest({ method: "GET", url: `/api/tickets/${id}/details` });
+
 export const getMyTickets = () =>
   apiRequest({ method: "GET", url: "/api/tickets/mine" });
+
+export const getMyListings = (status = "") =>
+  apiRequest({ method: "GET", url: `/api/tickets/my-listings${status ? `?status=${encodeURIComponent(status)}` : ""}` });
+
+export const publishListing = (id) =>
+  apiRequest({ method: "POST", url: `/api/tickets/${id}/publish` });
+
+export const deactivateListing = (id) =>
+  apiRequest({ method: "POST", url: `/api/tickets/${id}/deactivate` });
+
+export const republishListing = (id) =>
+  apiRequest({ method: "POST", url: `/api/tickets/${id}/republish` });
+
+export const deleteListing = (id) =>
+  apiRequest({ method: "DELETE", url: `/api/tickets/${id}` });
+
+// =========================
+// REQUESTS
+// =========================
+
+export const createExchangeRequest = (ticket_id, notes = "") =>
+  apiRequest({ method: "POST", url: "/api/requests/exchange", data: { ticket_id, notes } });
+
+export const getIncomingRequests = () =>
+  apiRequest({ method: "GET", url: "/api/requests/incoming" });
+
+export const getOutgoingRequests = () =>
+  apiRequest({ method: "GET", url: "/api/requests/outgoing" });
+
+export const acceptExchangeRequest = (id) =>
+  apiRequest({ method: "PUT", url: `/api/requests/${id}/accept` });
+
+export const rejectExchangeRequest = (id) =>
+  apiRequest({ method: "PUT", url: `/api/requests/${id}/reject` });
+
+export const cancelExchangeRequest = (id) =>
+  apiRequest({ method: "PUT", url: `/api/requests/${id}/cancel` });
+
+export const completeExchangePayment = (id) =>
+  apiRequest({ method: "POST", url: `/api/requests/${id}/complete-payment` });
+
+// =========================
+// PHASE 9: PAYMENTS & TRANSACTIONS
+// =========================
+
+export const createPaymentOrder = (data) =>
+  apiRequest({ method: "POST", url: "/api/payment/create-order", data });
+
+export const verifyPayment = (data) =>
+  apiRequest({ method: "POST", url: "/api/payment/verify", data });
+
+export const retryPayment = (transaction_id) =>
+  apiRequest({ method: "POST", url: "/api/payment/retry", data: { transaction_id } });
+
+export const getTransactionDetails = (id) =>
+  apiRequest({ method: "GET", url: `/api/transactions/${id}` });
+
+export const confirmTransactionCompletion = (id) =>
+  apiRequest({ method: "POST", url: `/api/transactions/${id}/confirm-completion` });
+
+export const getMyTransactions = () =>
+  apiRequest({ method: "GET", url: "/api/transactions/mine" });
+
+// =========================
+// PHASE 9: CHAT & MESSAGING
+// =========================
+
+export const getConversations = () =>
+  apiRequest({ method: "GET", url: "/api/chat/conversations" });
+
+export const startConversation = (data) =>
+  apiRequest({ method: "POST", url: "/api/chat/conversations/start", data });
+
+export const getConversationMessages = (id) =>
+  apiRequest({ method: "GET", url: `/api/chat/conversations/${id}/messages` });
+
+export const sendChatMessage = (data) =>
+  apiRequest({ method: "POST", url: "/api/chat/send", data });
+
+// =========================
+// PHASE 9: RATINGS & REVIEWS
+// =========================
+
+export const submitUserRating = (data) =>
+  apiRequest({ method: "POST", url: "/api/rating/submit", data });
+
+export const getUserRatings = (user_id) =>
+  apiRequest({ method: "GET", url: `/api/rating/user/${user_id}` });
 
 export const getSearchHistory = () =>
   apiRequest({ method: "GET", url: "/api/tickets/search/history" });
@@ -348,8 +441,23 @@ export const adminListTickets = () =>
 export const adminUpdateTicketStatus = (id, data) =>
   apiRequest({ method: "PUT", url: `/api/admin/tickets/${id}/status`, data });
 
+export const adminApproveTicket = (id) =>
+  apiRequest({ method: "PUT", url: `/api/admin/tickets/${id}/approve` });
+
+export const adminRejectTicket = (id, reason = "") =>
+  apiRequest({ method: "PUT", url: `/api/admin/tickets/${id}/reject`, data: { reason } });
+
+export const adminForceRemoveTicket = (id) =>
+  apiRequest({ method: "DELETE", url: `/api/admin/tickets/${id}/force-remove` });
+
 export const adminDeleteTicket = (id) =>
   apiRequest({ method: "DELETE", url: `/api/admin/tickets/${id}` });
+
+export const adminGetExchangeHistory = () =>
+  apiRequest({ method: "GET", url: "/api/admin/exchanges/history" });
+
+export const adminGetListingHistory = () =>
+  apiRequest({ method: "GET", url: "/api/admin/tickets/history" });
 
 export const adminListVerifications = () =>
   apiRequest({ method: "GET", url: "/api/admin/verifications" });

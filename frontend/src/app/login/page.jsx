@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mail, ShieldCheck, Loader2 } from 'lucide-react';
+import { Mail, ShieldCheck, Loader2, Eye, EyeOff } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import { loginUser } from '../../services/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,6 +15,7 @@ function LoginContent() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -66,17 +67,28 @@ function LoginContent() {
                 autoComplete="email"
               />
             </label>
+            
             <label className="block space-y-2">
               <span className="label">Password</span>
-              <input
-                className="field"
-                placeholder="Enter password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
+              <div className="relative">
+                <input
+                  className="field pr-10"
+                  placeholder="Enter password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </label>
 
             {error && (

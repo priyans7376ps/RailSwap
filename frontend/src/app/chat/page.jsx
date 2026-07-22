@@ -1,36 +1,34 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { MessageSquare, User, Clock, ChevronRight } from 'lucide-react';
 import Navbar from '../../components/Navbar';
-import ChatBox from '../../components/ChatBox';
 import RequireAuth from '../../components/RequireAuth';
-import { getMatches } from '../../services/api';
+import { getConversations } from '../../services/api';
 
-export default function ChatPage() {
+export default function ChatListPage() {
   return (
     <RequireAuth>
-      <ChatContent />
+      <ChatListContent />
     </RequireAuth>
   );
 }
 
-function ChatContent() {
-  // In a real app, this page would list conversations.
-  // For now, we'll fetch matches to find potential chat partners
-  // and pass the first match's owner to the ChatBox.
+function ChatListContent() {
+  const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [partner, setPartner] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
+      setError('');
       try {
-        const res = await getMatches();
-        const tickets = res?.data?.tickets || res?.tickets || [];
-        if (tickets.length > 0 && tickets[0].owner) {
-          setPartner(tickets[0].owner);
-        }
+        const res = await getConversations();
+        setConversations(res?.data?.conversations || res?.conversations || []);
       } catch (err) {
-        console.error('Failed to load chat partners');
+        setError(err?.message || 'Failed to load conversations.');
       } finally {
         setLoading(false);
       }
@@ -41,43 +39,73 @@ function ChatContent() {
     <>
       <Navbar />
       <main className="page-shell py-10">
-        <p className="eyebrow">Secure messaging</p>
-        <h1 className="mt-3 text-4xl font-bold text-slate-950">Inbox</h1>
-
-        <div className="mt-8 grid h-[600px] rounded-3xl border border-slate-200 bg-white shadow-xl lg:grid-cols-[300px_1fr] overflow-hidden">
-          <div className="hidden border-r border-slate-100 bg-slate-50/50 p-4 lg:block overflow-y-auto">
-            <h2 className="px-2 text-xs font-bold uppercase tracking-wider text-slate-400">Recent conversations</h2>
-            
-            {loading ? (
-              <div className="mt-4 p-2 text-sm text-slate-500">Loading...</div>
-            ) : partner ? (
-              <div className="mt-4 flex cursor-pointer gap-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-100 font-bold text-cyan-800">
-                  {partner.name?.charAt(0)?.toUpperCase()}
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <div className="flex items-center justify-between">
-                    <p className="truncate text-sm font-bold text-slate-900">{partner.name}</p>
-                    <span className="text-[10px] font-medium text-slate-400">Just now</span>
-                  </div>
-                  <p className="mt-1 truncate text-xs text-slate-500">Select to view messages</p>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 p-2 text-sm text-slate-500">No active conversations.</div>
-            )}
-          </div>
-          
-          <div className="relative flex flex-col bg-slate-50/30">
-            {partner ? (
-              <ChatBox partner={partner} />
-            ) : (
-              <div className="grid h-full place-items-center text-sm text-slate-500">
-                {loading ? 'Loading...' : 'Select a conversation to start chatting'}
-              </div>
-            )}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-950">Messages</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Direct chat communication between ticket buyers and sellers.
+            </p>
           </div>
         </div>
+
+        {error && (
+          <div className="mt-4 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm font-semibold text-rose-800">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="mt-10 py-16 text-center text-slate-500 font-medium">Loading conversations...</div>
+        ) : conversations.length === 0 ? (
+          <div className="mt-8 rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+            <MessageSquare className="mx-auto h-10 w-10 text-slate-400" />
+            <h3 className="mt-3 text-lg font-bold text-slate-900">No messages yet</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              When you send or receive exchange requests, chat conversations will appear here.
+            </p>
+            <Link href="/search-ticket" className="btn-primary mt-4 inline-block text-xs py-2 px-4">
+              Browse Available Tickets
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-3 max-w-3xl">
+            {conversations.map((c) => (
+              <Link
+                key={c.id}
+                href={`/chat/${c.id}`}
+                className="premium-card p-5 flex items-center justify-between hover:bg-slate-50/80 transition group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="grid h-12 w-12 place-items-center rounded-full bg-cyan-100 font-bold text-cyan-800 text-lg">
+                    {c.other_user?.name?.[0] || 'U'}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-slate-900 text-base">{c.other_user?.name || 'User'}</h4>
+                      {c.unread_count > 0 && (
+                        <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-extrabold text-white">
+                          {c.unread_count} new
+                        </span>
+                      )}
+                    </div>
+                    {c.ticket && (
+                      <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                        PNR {c.ticket.pnr_number}: {c.ticket.source_station} → {c.ticket.destination_station}
+                      </p>
+                    )}
+                    {c.last_message && (
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-1">
+                        {c.last_message.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            ))}
+          </div>
+        )}
       </main>
     </>
   );

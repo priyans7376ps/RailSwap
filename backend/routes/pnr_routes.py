@@ -1,16 +1,14 @@
 from flask import Blueprint, request, jsonify
 from app.services.pnr_service import verify_pnr
-from utils.jwt_helper import optional_auth
 
-verification_bp = Blueprint("verification", __name__)
+pnr_bp = Blueprint("pnr", __name__)
 
 
-@verification_bp.post("/verify")
-@optional_auth
-def verify_ticket(_user=None):
+@pnr_bp.post("/verify")
+def verify_pnr_route():
     """
-    POST /api/ticket/verify
-    Body: { "pnr": "2749628734" } or { "pnr_number": "2749628734" }
+    POST /api/pnr/verify
+    Body: { "pnr": "2749628734" }
     """
     payload = request.get_json(silent=True) or {}
     pnr_input = payload.get("pnr") or payload.get("pnr_number")
@@ -25,6 +23,7 @@ def verify_ticket(_user=None):
     result = verify_pnr(str(pnr_input))
 
     if result.get("success") and result.get("verified"):
+        # Add backward-compatible data field containing ticket object
         result["data"] = {
             "verified": True,
             "pnr": result.get("pnr"),
@@ -45,4 +44,5 @@ def verify_ticket(_user=None):
         }
         return jsonify(result), 200
 
-    return jsonify(result), 400
+    status_code = 400 if result.get("message") == "Invalid PNR number." else 400
+    return jsonify(result), status_code
