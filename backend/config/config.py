@@ -10,12 +10,10 @@ def _coerce_bool(val: str) -> bool:
     return str(val).lower() in ("1", "true", "yes", "on")
 
 
-
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
     # JWT_SECRET_KEY MUST come from .env; if missing we fall back to SECRET_KEY.
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or os.getenv("SECRET_KEY", "change-me-in-production")
-
 
     # Always default to the repo's local SQLite DB to avoid schema drift.
     # Existing DB lives at backend/instance/railswap.db
@@ -26,7 +24,6 @@ class Config:
     # We no longer hard-crash if the URL is not the default SQLite DB,
     # as production will likely use PostgreSQL.
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", _default_sqlite_uri)
-
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
@@ -59,6 +56,15 @@ class Config:
 
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", str(BASE_DIR / "uploads" / "tickets"))
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH_BYTES", "5242880"))
+
+    # ==========================
+    # RailKit Configuration
+    # ==========================
+    RAILKIT_API_KEY = os.getenv("RAILKIT_API_KEY", "")
+    RAILKIT_BASE_URL = os.getenv(
+        "RAILKIT_BASE_URL",
+        "https://railkit-api.rajivdubey.dev"
+    )
 
 
 class DevelopmentConfig(Config):

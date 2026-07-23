@@ -85,18 +85,18 @@ def dashboard_kpis():
 
     total_transactions = Transaction.query.count()
 
-    # Revenue calculation based on platform_commission
-    total_revenue = db.session.query(func.sum(Transaction.platform_commission)).scalar() or 0
+    # Revenue calculation based on platform_fee
+    total_revenue = db.session.query(func.sum(Transaction.platform_fee)).scalar() or 0
     
     today = datetime.utcnow().date()
     start_of_day = datetime(today.year, today.month, today.day)
     start_of_month = datetime(today.year, today.month, 1)
     
-    daily_revenue = db.session.query(func.sum(Transaction.platform_commission)).filter(
+    daily_revenue = db.session.query(func.sum(Transaction.platform_fee)).filter(
         Transaction.created_at >= start_of_day
     ).scalar() or 0
     
-    monthly_revenue = db.session.query(func.sum(Transaction.platform_commission)).filter(
+    monthly_revenue = db.session.query(func.sum(Transaction.platform_fee)).filter(
         Transaction.created_at >= start_of_month
     ).scalar() or 0
 
@@ -423,7 +423,7 @@ def get_analytics():
         daily_tx = Transaction.query.filter(
             func.date(Transaction.created_at) == target_date
         ).all()
-        daily_rev = sum(float(tx.platform_commission or 0) for tx in daily_tx)
+        daily_rev = sum(float(tx.platform_fee or 0) for tx in daily_tx)
         revenue_trend[i] = daily_rev
         
         # Calculate ticket uploads for that day

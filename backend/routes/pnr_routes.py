@@ -1,6 +1,9 @@
+import logging
+import traceback
 from flask import Blueprint, request, jsonify
 from app.services.pnr_service import verify_pnr
 
+logger = logging.getLogger(__name__)
 pnr_bp = Blueprint("pnr", __name__)
 
 
@@ -17,10 +20,21 @@ def verify_pnr_route():
         return jsonify({
             "success": False,
             "verified": False,
-            "message": "Invalid PNR number."
+            "message": "Invalid PNR Number."
         }), 400
 
-    result = verify_pnr(str(pnr_input))
+    try:
+        result = verify_pnr(str(pnr_input))
+        logger.info("[PNR ROUTE] Result for %s: %s", pnr_input, result)
+        print("PNR RESULT =>", result)
+    except Exception as exc:
+        logger.error("[PNR ROUTE] Exception during verification: %s", str(exc))
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "verified": False,
+            "message": f"Server error during verification: {str(exc)}"
+        }), 500
 
     if result.get("success") and result.get("verified"):
         # Add backward-compatible data field containing ticket object
@@ -44,5 +58,6 @@ def verify_pnr_route():
         }
         return jsonify(result), 200
 
-    status_code = 400 if result.get("message") == "Invalid PNR number." else 400
+    # Clean HTTP 400 response for unsuccessful/unverified PNR checks
+    status_code = 200 if result.get("verified") else 400
     return jsonify(result), status_code
